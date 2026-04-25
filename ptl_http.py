@@ -3,8 +3,14 @@
 import requests
 import sys
 import logging
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.DEBUG, format=' %(asctime)s - %(levelname)s - %(message)s')
+
+class RawRequest(requests.PreparedRequest):
+    def prepare_url(self, url, params):
+        # skips url normalisation
+        self.url = url
 
 
 ### User Stories
@@ -28,16 +34,23 @@ def post_request(url: str, datajson=None, has_data=False, has_json=False, params
     logging.debug(f"POST: URL = {url} DATA = {data} JSON = {json} PARAMS = {params}")
     return requests.post(url=url, data=data, json=json,)
 
+
 def add_params_to_url(url: str, params: list):
+    if not(params): return url
     output = "?"
     for i in range(len(params)):
         output = output + f"{params[i][0]}={params[i][1]}&"
     return url + output
 
+
 def get_request(url: str, params=None, cookies=None, headers=None, data=None):
     logging.debug(f"GET: URL = {url} PARAMS = {params} COOKIES = {cookies} HEADERS = {headers} DATA = {data}")
     return requests.get(url=url, params=params, cookies=cookies, headers=headers, data=data)
 
+def construct_request(method: str, url: str, params=None, cookies=None, headers=None, data=None, json=None):
+    req = requests.Request(method, url, cookies=cookies, headers=headers, data=data, json=json)
+    prep = req.prepare()
+    prep.url = add_params_to_url
 
 def parse_dict_from_string(dict_string: str) -> dict:
     """
@@ -73,24 +86,31 @@ def get_url(url_param, is_url_present):
 def main():
     # For GET, `params` are GET Parameters, like `?page=20&name=hacker`
 
-    url = user_agent = content_type = accept_language = ""
+    url = user_agent = content_type = accept_language = method = ""
     cookies = params = headers = datajson = None
     # Checks
     is_url_present = is_post = is_get = has_params = has_body = has_data = has_json= False
     logging.debug(len(input))
     for i in range(int(len(input) / 2)):
         if input[2 * i]   == "-p":
-            is_post = True
+            method = "POST"
             url, is_url_present = get_url(input[(2 * i) + 1], is_url_present)
         elif input[2 * i] == "-g":
-            is_get = True
+            method = "GET"
             url, is_url_present = get_url(input[(2 * i) + 1], is_url_present)
         elif input[2 * i] == "-m":
+            if '%' in input[(2 * i) + 1]:
+                print("To use URL encoded strings for GET Parameters, manually append them to the end of the URL. Do not put them here.")
+                sys.exit()
             params = parse_book_from_string(input[(2 * i) + 1])
+        elif input[2 * i] == "-u":
+            url, is_url_present = get_url(input[(2 * i) + 1], is_url_present)
+        elif input[2 * i] == "-x":
+            method = str(input[(2 * i) + 1])
         elif input[2 * i] == "-c":
             cookies = parse_book_from_string(input[(2 * i) + 1])
-        elif input[2 * i] == "-h":
-            headers = parse_book_from_string(input[(2 * i) + 1])
+        elif input[2 * i] == "-H":
+            headers = parse_dict_from_string(input[(2 * i) + 1])
         elif input[2 * i] == "-d":
             has_data = True
             datajson = parse_book_from_string(input[(2 * i) + 1])
@@ -100,15 +120,26 @@ def main():
         else:
             sys.exit()
 
-    if is_post:
+    request = requests.Request
+    if method == "POST":
         response = post_request(url, datajson, has_data, has_json, params)
         print(response.text)
         print(response.request.headers)
         print(response.request.body)
-    elif is_get:
+    elif method == "GET":
         response = get_request(url, params, cookies, headers, datajson)
         print(response.text)
         print(response.request.headers)
         print(response.request.body)
+    else:
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers
+        )
+        print(response.text)
+        print(response.request.headers)
+        print(response.request.body)
+
 
 main()
