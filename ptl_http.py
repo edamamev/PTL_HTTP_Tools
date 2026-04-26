@@ -47,10 +47,14 @@ def get_request(url: str, params=None, cookies=None, headers=None, data=None):
     logging.debug(f"GET: URL = {url} PARAMS = {params} COOKIES = {cookies} HEADERS = {headers} DATA = {data}")
     return requests.get(url=url, params=params, cookies=cookies, headers=headers, data=data)
 
-def construct_request(method: str, url: str, params=None, cookies=None, headers=None, data=None, json=None):
-    req = requests.Request(method, url, cookies=cookies, headers=headers, data=data, json=json)
+
+def construct_request(method: str, url: str, fragment=None, params=None, cookies=None, headers=None, data=None, json=None, file=None):
+    req = requests.Request(method, url, cookies=cookies, headers=headers, data=data, json=json, files=file)
     prep = req.prepare()
-    prep.url = add_params_to_url
+    if fragment: fragment = "%23" + fragment
+    prep.url = add_params_to_url(url, params) + fragment
+    return requests.Session().send(prep)
+
 
 def parse_dict_from_string(dict_string: str) -> dict:
     """
@@ -62,6 +66,7 @@ def parse_dict_from_string(dict_string: str) -> dict:
         key, value = pair.split(": ", 1)
         result[key.strip()] = value.strip()
     return result
+
 
 def parse_book_from_string(book_string: str):
     result = []
@@ -86,7 +91,7 @@ def get_url(url_param, is_url_present):
 def main():
     # For GET, `params` are GET Parameters, like `?page=20&name=hacker`
 
-    url = user_agent = content_type = accept_language = method = ""
+    url = user_agent = content_type = accept_language = method = fragment = filepath = ""
     cookies = params = headers = datajson = None
     # Checks
     is_url_present = is_post = is_get = has_params = has_body = has_data = has_json= False
@@ -117,6 +122,8 @@ def main():
         elif input[2 * i] == "-j":
             has_json = True
             datajson = parse_book_from_string(input[(2 * i) + 1])
+        elif input[2 * i] == "-f":
+            fragment = input[(2 * i) + 1]
         else:
             sys.exit()
 
@@ -127,7 +134,14 @@ def main():
         print(response.request.headers)
         print(response.request.body)
     elif method == "GET":
-        response = get_request(url, params, cookies, headers, datajson)
+        if '#' in url: url, fragment = url.split('#')
+        #response = get_request(url, params, cookies, headers, datajson)
+        if filepath:
+            with open(filepath, "rb") as file:
+                files = {'file': file}
+                response = construct_request(method, url, fragment, params, cookies, headers, datajson, files)
+        else:
+            response = construct_request(method, url, fragment, params, cookies, headers, datajson)
         print(response.text)
         print(response.request.headers)
         print(response.request.body)
